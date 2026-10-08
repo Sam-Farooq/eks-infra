@@ -68,8 +68,11 @@ Finding that out costs eight minutes of a failed apply.
 
 ## CI
 
-Static checks on every push: `fmt -check`, `tflint`, `tfsec` with
-`soft_fail: false`. Then `validate` for both environments with
+Static checks on every push: `fmt -check`, `tflint`, and `trivy config` at
+CRITICAL, HIGH and MEDIUM with `exit-code: 1`. trivy rather than tfsec because
+tfsec is archived and folded into trivy, and the `#trivy:ignore` directives in
+`modules/` are only honoured by trivy. Local runs and CI read the same
+`trivy.yaml`, so a clean local run means the same thing as a clean CI run. Then `validate` for both environments with
 `-backend=false`, so it needs no credentials and takes no state lock.
 
 Pull requests get a staging plan posted as a comment. `main` applies to prod
