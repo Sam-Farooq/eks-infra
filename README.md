@@ -19,9 +19,10 @@ cross-AZ data charge on every egress byte plus a single point of failure.
 In staging that trade is worth about $90/month and nobody is paged for it.
 In prod it is not.
 
-**S3 gateway endpoint on the private route tables.** Free, and it keeps
-lakehouse traffic off the NAT entirely. On this account NAT data processing
-was the largest single line on the bill before it was added.
+**S3 gateway endpoint on the private route tables.** Free, and it keeps S3
+traffic off the NAT entirely. NAT data processing is billed per gigabyte, so
+on a workload that reads from S3 all day it is usually the line worth
+attacking first.
 
 **Spot for Spark executors, on demand for general.** The Spark group is
 tainted `workload=spark:NoSchedule` so nothing lands there by accident, and

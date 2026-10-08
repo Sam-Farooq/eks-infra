@@ -27,7 +27,8 @@ module "eks" {
 
   node_groups = {
     general = {
-      # All spot in staging. A node going away here is a useful rehearsal.
+      # All spot in staging. A node going away here is a cheap way to find
+      # out whether anything quietly depends on a pod staying put.
       instance_types = ["m6i.large", "m5.large", "m6a.large"]
       capacity_type  = "SPOT"
       desired_size   = 2

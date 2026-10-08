@@ -103,8 +103,8 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private[count.index].id
 }
 
-# Gateway endpoint for S3. Free, and it keeps lakehouse traffic off the NAT,
-# which on this account was the single largest line on the bill.
+# Gateway endpoint for S3. Free, and it keeps S3 traffic off the NAT, which
+# bills per gigabyte and is usually the first line worth attacking.
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.this.id
   service_name      = "com.amazonaws.${var.region}.s3"
