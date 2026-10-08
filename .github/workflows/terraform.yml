@@ -21,7 +21,7 @@ jobs:
       - run: tflint --recursive --format compact
       # trivy, not tfsec: tfsec is archived and folded into trivy, and the
       # #trivy:ignore directives in modules/ are only honoured by trivy.
-      - uses: aquasecurity/trivy-action@0.28.0
+      - uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
           scan-ref: .
