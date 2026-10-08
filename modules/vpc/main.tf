@@ -10,6 +10,8 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_vpc" "this" {
   cidr_block           = var.cidr
   enable_dns_hostnames = true
@@ -17,6 +19,10 @@ resource "aws_vpc" "this" {
   tags                 = merge(var.tags, { Name = var.name })
 }
 
+# A public subnet that does not assign public IPs is not a public subnet.
+# Workloads run in the private subnets below; this one carries the NAT
+# gateways and the load balancers.
+#trivy:ignore:AVD-AWS-0164
 resource "aws_subnet" "public" {
   count                   = var.az_count
   vpc_id                  = aws_vpc.this.id
@@ -105,4 +111,80 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_endpoint_type = "Gateway"
   route_table_ids   = aws_route_table.private[*].id
   tags              = merge(var.tags, { Name = "${var.name}-s3" })
+}
+
+# Flow logs. Without them a security question about who talked to what has no
+# answer at all, and the answer is always needed after the fact.
+resource "aws_kms_key" "flow" {
+  description             = "VPC flow log encryption for ${var.name}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  # CloudWatch Logs has to be able to use the key or the log group cannot be
+  # created, and the error it gives does not say so.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Effect    = "Allow"
+        Principal = { Service = "logs.${var.region}.amazonaws.com" }
+        Action    = ["kms:Encrypt*", "kms:Decrypt*", "kms:ReEncrypt*", "kms:GenerateDataKey*", "kms:Describe*"]
+        Resource  = "*"
+      },
+    ]
+  })
+  tags = var.tags
+}
+
+resource "aws_cloudwatch_log_group" "flow" {
+  name              = "/aws/vpc/${var.name}/flow-logs"
+  retention_in_days = var.flow_log_retention_days
+  kms_key_id        = aws_kms_key.flow.arn
+  tags              = var.tags
+}
+
+resource "aws_iam_role" "flow" {
+  name = "${var.name}-vpc-flow-logs"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "flow" {
+  name = "${var.name}-vpc-flow-logs"
+  role = aws_iam_role.flow.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+      ]
+      Resource = "${aws_cloudwatch_log_group.flow.arn}:*"
+    }]
+  })
+}
+
+resource "aws_flow_log" "this" {
+  vpc_id                   = aws_vpc.this.id
+  traffic_type             = "ALL"
+  log_destination_type     = "cloud-watch-logs"
+  log_destination          = aws_cloudwatch_log_group.flow.arn
+  iam_role_arn             = aws_iam_role.flow.arn
+  max_aggregation_interval = 600
+  tags                     = var.tags
 }

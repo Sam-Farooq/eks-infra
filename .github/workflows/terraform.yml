@@ -19,8 +19,15 @@ jobs:
       - run: terraform fmt -check -recursive
       - uses: terraform-linters/setup-tflint@v4
       - run: tflint --recursive --format compact
-      - uses: aquasecurity/tfsec-action@v1.0.3
-        with: {soft_fail: false}
+      # trivy, not tfsec: tfsec is archived and folded into trivy, and the
+      # #trivy:ignore directives in modules/ are only honoured by trivy.
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          exit-code: "1"
+          severity: CRITICAL,HIGH,MEDIUM
+          trivy-config: trivy.yaml
 
   validate:
     runs-on: ubuntu-latest

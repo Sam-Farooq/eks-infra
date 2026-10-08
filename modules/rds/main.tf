@@ -17,11 +17,14 @@ resource "aws_security_group" "this" {
     description     = "Postgres from the cluster node groups"
   }
 
+  # A database has no business reaching the internet. Egress is held to the
+  # VPC so it can still talk to S3 through the gateway endpoint.
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.vpc_cidr]
+    description = "Outbound within the VPC only"
   }
 
   tags = var.tags
@@ -29,6 +32,18 @@ resource "aws_security_group" "this" {
 
 # Generated, stored in Secrets Manager, never in state as plaintext and never
 # in a tfvars file. The password is read by the application through IRSA.
+resource "aws_kms_key" "db" {
+  description             = "RDS storage, snapshots, insights and secret for ${var.name}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  tags                    = var.tags
+}
+
+resource "aws_kms_alias" "db" {
+  name          = "alias/${var.name}-rds"
+  target_key_id = aws_kms_key.db.key_id
+}
+
 resource "random_password" "master" {
   length  = 32
   special = true
@@ -40,6 +55,7 @@ resource "random_password" "master" {
 resource "aws_secretsmanager_secret" "db" {
   name                    = "${var.name}/postgres"
   recovery_window_in_days = 7
+  kms_key_id              = aws_kms_key.db.arn
   tags                    = var.tags
 }
 
@@ -54,6 +70,10 @@ resource "aws_secretsmanager_secret_version" "db" {
   })
 }
 
+# deletion_protection is var-driven: true in prod, false in staging so a
+# teardown does not need a console visit. trivy cannot resolve the
+# variable and assumes the worst.
+#trivy:ignore:AVD-AWS-0177
 resource "aws_db_instance" "this" {
   identifier     = var.name
   engine         = "postgres"
@@ -64,6 +84,7 @@ resource "aws_db_instance" "this" {
   max_allocated_storage = var.max_allocated_storage
   storage_type          = "gp3"
   storage_encrypted     = true
+  kms_key_id            = aws_kms_key.db.arn
 
   db_name  = var.database_name
   username = var.master_username
@@ -86,9 +107,12 @@ resource "aws_db_instance" "this" {
   final_snapshot_identifier = "${var.name}-final-${formatdate("YYYYMMDDhhmm", timestamp())}"
   deletion_protection       = var.deletion_protection
 
-  performance_insights_enabled    = true
-  enabled_cloudwatch_logs_exports = ["postgresql", "upgrade"]
-  auto_minor_version_upgrade      = true
+  performance_insights_enabled          = true
+  performance_insights_kms_key_id       = aws_kms_key.db.arn
+  performance_insights_retention_period = 7
+  iam_database_authentication_enabled   = true
+  enabled_cloudwatch_logs_exports       = ["postgresql", "upgrade"]
+  auto_minor_version_upgrade            = true
 
   lifecycle {
     # timestamp() in the snapshot name would otherwise force a diff on

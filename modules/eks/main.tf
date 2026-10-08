@@ -1,5 +1,3 @@
-data "aws_caller_identity" "current" {}
-
 resource "aws_eks_cluster" "this" {
   name     = var.cluster_name
   role_arn = aws_iam_role.cluster.arn
@@ -8,11 +6,11 @@ resource "aws_eks_cluster" "this" {
   vpc_config {
     subnet_ids              = var.private_subnet_ids
     endpoint_private_access = true
-    # Public endpoint stays on but is CIDR-restricted. Fully private means a
-    # bastion for every kubectl, which in practice means a long-lived bastion
-    # nobody patches.
-    endpoint_public_access  = true
-    public_access_cidrs     = var.public_access_cidrs
+    # An empty public_access_cidrs is NOT "no access": the AWS API falls back
+    # to 0.0.0.0/0, so passing [] opens the API server to the internet. Tie
+    # the toggle to the list instead, so the safe default is actually safe.
+    endpoint_public_access = length(var.public_access_cidrs) > 0
+    public_access_cidrs    = length(var.public_access_cidrs) > 0 ? var.public_access_cidrs : null
   }
 
   # Secrets at rest are encrypted with a customer-managed key. The default
@@ -22,7 +20,7 @@ resource "aws_eks_cluster" "this" {
     resources = ["secrets"]
   }
 
-  enabled_cluster_log_types = ["api", "audit", "authenticator"]
+  enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   depends_on = [
     aws_iam_role_policy_attachment.cluster_policy,
@@ -37,6 +35,7 @@ resource "aws_eks_cluster" "this" {
 resource "aws_cloudwatch_log_group" "cluster" {
   name              = "/aws/eks/${var.cluster_name}/cluster"
   retention_in_days = var.log_retention_days
+  kms_key_id        = aws_kms_key.eks.arn
   tags              = var.tags
 }
 

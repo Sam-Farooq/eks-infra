@@ -8,10 +8,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "sf-tfstate-prod"
-    key          = "eks-infra/prod/terraform.tfstate"
-    region       = "eu-central-1"
-    encrypt      = true
+    bucket  = "sf-tfstate-prod"
+    key     = "eks-infra/prod/terraform.tfstate"
+    region  = "eu-central-1"
+    encrypt = true
     # S3 native locking. Replaces the DynamoDB table that every older module
     # still carries around.
     use_lockfile = true

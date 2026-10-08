@@ -3,6 +3,11 @@ variable "vpc_id" { type = string }
 variable "private_subnet_ids" { type = list(string) }
 variable "allowed_security_group_ids" { type = list(string) }
 
+variable "vpc_cidr" {
+  type        = string
+  description = "Egress from the database is confined to this range."
+}
+
 variable "engine_version" {
   type    = string
   default = "16.4"
@@ -41,6 +46,10 @@ variable "multi_az" {
 variable "backup_retention_days" {
   type    = number
   default = 14
+  validation {
+    condition     = var.backup_retention_days >= 7
+    error_message = "Keep at least 7 days of backups. Staging may override this deliberately."
+  }
 }
 
 variable "deletion_protection" {

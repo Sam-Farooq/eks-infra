@@ -56,12 +56,13 @@ module "rds" {
   name                       = local.name
   vpc_id                     = module.vpc.vpc_id
   private_subnet_ids         = module.vpc.private_subnet_ids
+  vpc_cidr                   = module.vpc.cidr
   allowed_security_group_ids = [module.eks.cluster_security_group_id]
 
   instance_class        = "db.t4g.medium"
   allocated_storage     = 20
   multi_az              = false
-  backup_retention_days = 1
+  backup_retention_days = 7
   # Off, so a teardown does not need a console visit.
   deletion_protection = false
 

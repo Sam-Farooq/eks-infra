@@ -1,0 +1,14 @@
+# Local runs and CI read the same config, so "it passed on my machine" means
+# the same thing in both places.
+scan:
+  scanners:
+    - misconfig
+
+misconfiguration:
+  terraform:
+    exclude-downloaded-modules: true
+
+severity:
+  - CRITICAL
+  - HIGH
+  - MEDIUM

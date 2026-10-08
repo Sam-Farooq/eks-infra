@@ -1,3 +1,7 @@
+# Server access logging needs a second bucket which is itself unlogged, so
+# it moves the finding rather than closing it. CloudTrail data events cover
+# this at account level, configured outside this repo.
+#trivy:ignore:AVD-AWS-0089
 resource "aws_s3_bucket" "this" {
   bucket = var.name
   tags   = var.tags
@@ -16,10 +20,22 @@ resource "aws_s3_bucket_versioning" "this" {
   versioning_configuration { status = "Enabled" }
 }
 
+resource "aws_kms_key" "this" {
+  description             = "Object encryption for ${var.name}"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  tags                    = var.tags
+}
+
 resource "aws_s3_bucket_server_side_encryption_configuration" "this" {
   bucket = aws_s3_bucket.this.id
   rule {
-    apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.this.arn
+    }
+    # Without this every object read is a separate KMS call. On a lakehouse
+    # scan that is both the latency and most of the KMS bill.
     bucket_key_enabled = true
   }
 }
